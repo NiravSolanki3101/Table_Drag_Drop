@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table Drag and Drop</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        h2{
+            font-family: Arial, sans-serif;
+            color: black;
+            text-align: center;
+        }
+        .container {
+            margin-top: 20px;
+            margin-left: auto;
+            margin-right: auto;
+            width: 40%;
+        }
+        .table-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+        table {
+            border-collapse: collapse;
+            margin-top: 15px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        td {
+            width: 100px;
+            height: 100px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            position: relative;
+        }
+        .box {
+            width: 100%;
+            height: 100%;
+            border-radius: 10%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            cursor: move;
+        }
+        .dragging {
+            opacity: 0.5;
+        }
+        .moving {
+            position: fixed;
+            z-index: 1000;
+            pointer-events: none;
+            transition: all 0.5s ease;
+        }
+        button {
+            width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+            margin-bottom: 5px;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 10px;
+            background-color : #5783db;
+            border: none;
+            color: rgb(255, 255, 255);
+        }
+
+        button:disabled,
+        button[disabled]{
+        border: 1px solid #999999;
+        background-color: #cccccc;
+        color: #666666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2> Table Drag and Drop</h2>
+        <button id="undoButton">Undo</button>
+        <button id="addRowButton">Add Row</button>
+        <div class="table-container">
+            <table id="dragDropTable"></table>
+        </div>
+    </div>
+
+    <script>
+        let nextRowNumber = 0;
+        let colNumber = 3;
+        let moveHistory = [];
+        let initialRowNumber = 3;
+
+        function createBox(number, color) {
+            const box = document.createElement('div');
+            box.className = 'box';
+            box.textContent = number;
+            box.style.backgroundColor = color;
+            box.draggable = true;
+            return box;
+        }
+
+        function createTable(rowCount) {
+            const table = document.getElementById('dragDropTable');
+            for (let i = 0; i < rowCount; i++) {
+                const row = table.insertRow();
+                for (let j = 1; j <= colNumber; j++) {
+                    const cell = row.insertCell();
+                    const number = (i * colNumber + j) * 100;
+                    const box = createBox(number, getRandomColor());
+                    cell.appendChild(box);
+                }
+                nextRowNumber++;
+            }
+        }
+
+        function addEventListeners() {
+            const table = document.getElementById('dragDropTable');
+            table.addEventListener('dragstart', dragStart);
+            table.addEventListener('dragover', dragOver);
+            table.addEventListener('drop', drop);
+            document.getElementById('undoButton').addEventListener('click', undo);
+            document.getElementById('addRowButton').addEventListener('click', addRow);
+            document.getElementById("undoButton").disabled = true
+        }
+
+        function dragStart(e) {
+            e.dataTransfer.setData('text/plain', e.target.textContent);
+            e.target.classList.add('dragging');
+        }
+
+        function dragOver(e) {
+            e.preventDefault();
+        }
+
+        function drop(e) {
+            e.preventDefault();
+            const draggedElement = document.querySelector('.box.dragging');
+            const targetElement = e.target.closest('.box');
+
+            if (draggedElement && targetElement && draggedElement !== targetElement) {
+                const sourceCell = draggedElement.parentNode;
+                const targetCell = targetElement.parentNode;
+
+                // add move
+                moveHistory.push({
+                    newRowAdd : false,
+                    source: sourceCell,
+                    target: targetCell,
+                    draggedElement: draggedElement,
+                    targetElement: targetElement
+                });
+
+                animateSwap(draggedElement, targetElement);
+            }
+
+            draggedElement.classList.remove('dragging');
+
+            // enable undo option
+            document.getElementById("undoButton").disabled = false;
+        }
+
+        function animateSwap(elem1, elem2) {
+            const rect1 = elem1.getBoundingClientRect();
+            const rect2 = elem2.getBoundingClientRect();
+
+            // Create clones for animation
+            const clone1 = elem1.cloneNode(true);
+            const clone2 = elem2.cloneNode(true);
+
+            // Set initial positions
+            setFixedPosition(clone1, rect1);
+            setFixedPosition(clone2, rect2);
+
+            // Add clones to the body and add 'moving' class
+            document.body.appendChild(clone1);
+            document.body.appendChild(clone2);
+            clone1.classList.add('moving');
+            clone2.classList.add('moving');
+
+            // Hide original elements
+            elem1.style.visibility = 'hidden';
+            elem2.style.visibility = 'hidden';
+
+            // Animate clones
+            setTimeout(() => {
+                setFixedPosition(clone1, rect2);
+                setFixedPosition(clone2, rect1);
+
+                // After animation, swap original elements and remove clones
+                setTimeout(() => {
+                    // Swap the elements
+                    const parent1 = elem1.parentNode;
+                    const parent2 = elem2.parentNode;
+                    parent1.appendChild(elem2);
+                    parent2.appendChild(elem1);
+
+                    // Show original elements
+                    elem1.style.visibility = 'visible';
+                    elem2.style.visibility = 'visible';
+
+                    // Remove clones
+                    document.body.removeChild(clone1);
+                    document.body.removeChild(clone2);
+                }, 500);
+            }, 50);
+        }
+
+        function setFixedPosition(element, rect) {
+            element.style.left = `${rect.left}px`;
+            element.style.top = `${rect.top}px`;
+            element.style.width = `${rect.width}px`;
+            element.style.height = `${rect.height}px`;
+        }
+
+        function undo() {
+            if (moveHistory.length > 0) {
+                const lastMove = moveHistory.pop();
+                if (lastMove.newRowAdd == true)
+                {
+                    document.getElementById('dragDropTable').deleteRow(-1);
+                    nextRowNumber--;
+                }
+                else
+                {
+                    animateSwap(lastMove.targetElement, lastMove.draggedElement);
+                }
+            }
+            if (moveHistory.length <= 0){
+                document.getElementById("undoButton").disabled = true;
+            }
+        }
+
+        function addRow() {
+            const table = document.getElementById('dragDropTable');
+            const newRow = table.insertRow();
+            for (let j = 1; j <= colNumber; j++) {
+                const cell = newRow.insertCell();
+                const number = (nextRowNumber * colNumber) * 100 + j * 100;
+                const box = createBox(number, getRandomColor());
+                cell.appendChild(box);
+            }
+            nextRowNumber++;
+
+            moveHistory.push({
+                newRowAdd : true,
+                source: null,
+                target: null,
+                draggedElement: null,
+                targetElement: null
+            });
+
+            // enable undo option
+            document.getElementById("undoButton").disabled = false;
+        }
+
+        // generate random colors
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+
+        createTable(initialRowNumber);
+        addEventListeners();
+    </script>
+</body>
+</html>
